@@ -1246,6 +1246,13 @@
     }
     .admin-save-dot { display: inline-flex; align-items: center; gap: 5px; color: rgba(244,242,234,.42); }
     .admin-save-dot i { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
+    .admin-save-dot[data-state="syncing"] i { background: #e9c46a; }
+    .admin-save-dot[data-state="success"] i { background: #8ee36b; }
+    .admin-save-dot[data-state="error"] i { background: #ff8e8e; }
+    .admin-save-dot[data-state="offline"] i { background: #8aa0b3; }
+    .admin-save-dot[data-state="idle"] i { background: rgba(244,242,234,.28); }
+    .admin-signout { min-height: 30px; padding: 0 10px; font-size: .55rem; letter-spacing: .06em; text-transform: uppercase; }
+    .gate-form input + label { margin-top: 13px; }
 
     /* ==========================================================================
        09 — TOAST / NO-WEBGL / REVEAL HELPERS
@@ -1799,6 +1806,7 @@
           <span class="admin-title" id="adminHeading">Control room<small>Theme &amp; content editor</small></span>
         </div>
         <div style="display:flex;align-items:center;gap:5px">
+          <button class="admin-btn admin-signout" id="adminSignOut" type="button" hidden>Sign out</button>
           <button class="icon-btn" id="adminLock" type="button" title="Lock panel" aria-label="Lock admin panel">⌑</button>
           <button class="admin-close" type="button" data-admin-close aria-label="Close admin panel"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 3l10 10M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
         </div>
@@ -1808,14 +1816,16 @@
         <div class="gate-inner" id="gateInner">
           <div class="gate-lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="4.5" y="10" width="15" height="10" rx="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.4"/><circle cx="12" cy="15" r="1.2" fill="currentColor"/></svg></div>
           <h2>Owner access.</h2>
-          <p>Enter the admin password to edit theme, copy and links. This gate is intentionally light — see the security note below.</p>
+          <p id="gateIntro">Enter the admin password to edit theme, copy and links. This gate is intentionally light — see the security note below.</p>
           <form class="gate-form" id="adminLoginForm">
-            <label for="adminPassword">Password</label>
+            <label for="adminEmail" id="adminEmailLabel" hidden>Email</label>
+            <input id="adminEmail" name="email" type="email" autocomplete="username" placeholder="you@example.com" hidden>
+            <label for="adminPassword" id="adminPasswordLabel">Password</label>
             <input id="adminPassword" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
             <button class="btn btn-primary" type="submit">Unlock control room <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 12 12 4M6 4h6v6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <p class="gate-error" id="gateError" role="alert"></p>
           </form>
-          <div class="admin-warning"><strong>Security note:</strong> a client-side password is not real security. Anyone with the file can inspect the code or localStorage. Use this as a convenience lock only, and move authentication to Firebase, Supabase or another backend for public administration.</div>
+          <div class="admin-warning" id="gateSecurityNote"><strong>Security note:</strong> a client-side password is not real security. Anyone with the file can inspect the code or localStorage. Use this as a convenience lock only, and move authentication to Supabase Auth for public administration.</div>
         </div>
       </div>
 
@@ -1914,6 +1924,14 @@
               <p class="admin-note">To make changes permanent without a backend: export the JSON, paste the object into <strong>DEFAULT_CONFIG</strong> inside index.html, then redeploy.</p>
             </div>
             <div class="admin-group">
+              <div class="admin-group-head"><h4>Cloud sync</h4><span id="cloudState">Not configured</span></div>
+              <div class="admin-btn-row">
+                <button class="admin-btn solid" type="button" id="pushCloud" disabled>Push to cloud</button>
+                <button class="admin-btn" type="button" id="pullCloud" disabled>Pull from cloud</button>
+              </div>
+              <p class="admin-note" id="cloudHint">Add your Supabase URL and anon key in the REMOTE_ADAPTER block near the bottom of this file. No service-role key belongs here.</p>
+            </div>
+            <div class="admin-group" id="localPasswordGroup">
               <div class="admin-group-head"><h4>Admin password</h4><span>SHA-256</span></div>
               <label class="admin-field"><span class="admin-field-label">Current password</span><input class="admin-input" id="currentPassword" type="password" autocomplete="current-password" placeholder="Old password"></label>
               <label class="admin-field"><span class="admin-field-label">New password</span><input class="admin-input" id="newPassword" type="password" autocomplete="new-password" placeholder="At least 6 characters"></label>
@@ -1921,24 +1939,16 @@
               <p class="admin-note">Only a SHA-256 hash is stored in CONFIG, never the password itself. This is still a client-side gate, not server security.</p>
             </div>
             <div class="admin-group">
-              <div class="admin-group-head"><h4>Cloud adapter</h4><span>Optional</span></div>
-              <p class="admin-note" style="margin-top:0">For changes visible to all visitors, connect a backend. Add your project keys in the <strong>REMOTE_ADAPTER</strong> block near the bottom of this file, then implement <strong>loadRemote()</strong> and <strong>saveRemote()</strong>.</p>
+              <div class="admin-group-head"><h4>Cloud adapter</h4><span>Supabase</span></div>
+              <p class="admin-note" style="margin-top:0">Paste your project values below. Leave empty to keep the site fully local. This table stores one JSONB row with your whole config.</p>
               <div class="admin-code">const REMOTE_ADAPTER = {
-  provider: "none", // "supabase" | "firebase"
-  supabase: {
-    url: "https://YOUR-PROJECT.supabase.co",
-    anonKey: "YOUR-ANON-KEY",
-    table: "portfolio_config",
-    rowId: "main"
-  },
-  firebase: {
-    apiKey: "YOUR-API-KEY",
-    projectId: "YOUR-PROJECT-ID",
-    collection: "portfolio",
-    docId: "main"
-  }
+  enabled: true,          // false forces local-only mode
+  url: "",                // https://YOUR-PROJECT.supabase.co
+  anonKey: "",            // public anon key — never service_role
+  table: "portfolio_config",
+  rowId: "main"
 };</div>
-              <p class="admin-note">Keep public write access locked down with RLS or server functions. Never put a service-role or admin key in this file.</p>
+              <p class="admin-note">Recommended table: <strong>portfolio_config</strong> with <strong>id text primary key</strong> and <strong>data jsonb</strong>. Enable RLS: public read, authenticated write.</p>
             </div>
             <div class="admin-group">
               <div class="admin-group-head"><h4>Publish checklist</h4><span>01</span></div>
@@ -1947,7 +1957,7 @@
           </section>
         </div>
         <footer class="admin-footer">
-          <span class="admin-save-dot"><i aria-hidden="true"></i><span id="adminSaveState">Saved locally</span></span>
+          <span class="admin-save-dot" id="adminSyncStatus" data-state="idle"><i aria-hidden="true"></i><span id="adminSaveState">Not configured</span></span>
           <span>Hidden route: #admin · Ctrl + Shift + A</span>
         </footer>
       </div>
@@ -1961,6 +1971,7 @@
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 
   <script>
   /* ============================================================================
@@ -1992,7 +2003,6 @@
       scrollMotion: "horizontal",
       scrollParallax: 1,
       speed: 1,
-      grain: true,
       grain: true,
       cursor: true,
       smooth: true,
@@ -2274,24 +2284,16 @@
     ]
   };
 
-  /* Optional cloud persistence adapter.
-     localStorage is local-only. To make admin edits visible to every visitor,
-     choose a provider and implement loadRemote()/saveRemote() below. Keep the
-     write path behind authentication (Supabase RLS / Firebase rules / server). */
+  /* Optional Supabase persistence.
+     Leave url/anonKey empty for local-only mode. Never put a service_role key
+     in this file — the anon key is public and must be protected by RLS.
+     Table shape: id text primary key, data jsonb, updated_at timestamptz. */
   const REMOTE_ADAPTER = {
-    provider: "none", // "supabase" | "firebase"
-    supabase: {
-      url: "https://YOUR-PROJECT.supabase.co",
-      anonKey: "YOUR-ANON-KEY",
-      table: "portfolio_config",
-      rowId: "main"
-    },
-    firebase: {
-      apiKey: "YOUR-API-KEY",
-      projectId: "YOUR-PROJECT-ID",
-      collection: "portfolio",
-      docId: "main"
-    }
+    enabled: true,          // false forces local-only mode
+    url: "https://jbkiuekxxhykflykedbp.supabase.co",                // e.g. "https://YOUR-PROJECT.supabase.co"
+    anonKey: "sb_publishable_VxxuU-YkDPVyrEqLFbcpLQ_xv396_RN",            // Supabase anon (public) key only
+    table: "portfolio_config",
+    rowId: "main"
   };
   </script>
 
@@ -2305,6 +2307,7 @@
 
     /* ---- Constants -------------------------------------------------------- */
     const STORAGE_KEY = "sht-portfolio-config-v3";
+    const REMOTE_CACHE_KEY = "sht-portfolio-remote-cache-v1";
     const LANG_KEY = "sht-portfolio-lang";
     const AUTH_KEY = "sht-portfolio-admin-auth";
     const $ = (selector, scope = document) => scope.querySelector(selector);
@@ -2379,8 +2382,60 @@
       }
     }
 
+    function readRemoteCache() {
+      try {
+        const raw = localStorage.getItem(REMOTE_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" && parsed.config && typeof parsed.config === "object" ? parsed.config : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
+    function writeRemoteCache(config) {
+      try { localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify({ config, savedAt: new Date().toISOString() })); }
+      catch (error) {}
+    }
+
+    /* Supabase is optional: empty url/anonKey keeps the old local-only path. */
+    const REMOTE = (function () {
+      const cfg = typeof REMOTE_ADAPTER !== "undefined" ? REMOTE_ADAPTER : {};
+      const url = String(cfg.url || "").trim().replace(/\/$/, "");
+      const anonKey = String(cfg.anonKey || "").trim();
+      const configured = !!(cfg.enabled !== false && /^https:\/\//i.test(url) && anonKey);
+      let client = null;
+      let clientFailed = false;
+      function getClient() {
+        if (!configured || clientFailed) return null;
+        if (client) return client;
+        const lib = window.supabase;
+        if (!lib || typeof lib.createClient !== "function") return null;
+        try {
+          client = lib.createClient(url, anonKey, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
+          });
+        } catch (error) {
+          clientFailed = true;
+          return null;
+        }
+        return client;
+      }
+      return {
+        configured,
+        getClient,
+        table: String(cfg.table || "portfolio_config"),
+        rowId: String(cfg.rowId || "main")
+      };
+    })();
+
+    const initialConfig = deepMerge(
+      clone(DEFAULT_CONFIG),
+      deepMerge(readRemoteCache() || {}, readSavedConfig() || {})
+    );
+
     const state = {
-      config: deepMerge(clone(DEFAULT_CONFIG), readSavedConfig() || {}),
+      config: initialConfig,
       lang: (() => {
         try { return localStorage.getItem(LANG_KEY) === "bn" ? "bn" : "en"; }
         catch (error) { return "en"; }
@@ -2397,8 +2452,16 @@
       roleIndex: 0,
       roleTimer: null,
       saveTimer: null,
+      remoteSaveTimer: null,
+      syncStatusTimer: null,
       contentRaf: null,
-      lastAdminTab: "theme"
+      lastAdminTab: "theme",
+      remote: {
+        session: false,
+        user: null,
+        loaded: false,
+        sdkPromise: null
+      }
     };
 
     function t(value) {
@@ -2550,15 +2613,198 @@
         try {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state.config));
           localStorage.setItem(LANG_KEY, state.lang);
-          const saveState = $("#adminSaveState");
-          if (saveState) saveState.textContent = "Saved locally · " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         } catch (error) {
           toast("Could not save to localStorage. Export JSON to keep your changes.");
+          return;
         }
+        if (!REMOTE.configured) setSyncStatus("Not configured", "idle");
+        else scheduleRemoteSave();
       };
       if (immediate) commit();
       else state.saveTimer = window.setTimeout(commit, 220);
     }
+
+    /* ---- SUPABASE SYNC (optional) ----------------------------------------- */
+    function setSyncStatus(message, kind = "idle") {
+      const row = $("#adminSyncStatus");
+      const label = $("#adminSaveState");
+      if (label) label.textContent = message;
+      if (!row) return;
+      row.dataset.state = kind;
+      window.clearTimeout(state.syncStatusTimer);
+      if (kind !== "idle") {
+        state.syncStatusTimer = window.setTimeout(() => {
+          row.dataset.state = "idle";
+          if (label) label.textContent = "Idle";
+        }, 3000);
+      }
+    }
+
+    function withTimeout(promise, ms) {
+      return new Promise((resolve, reject) => {
+        const timer = window.setTimeout(() => reject(new Error("TIMEOUT")), ms);
+        promise.then(
+          (value) => { window.clearTimeout(timer); resolve(value); },
+          (error) => { window.clearTimeout(timer); reject(error); }
+        );
+      });
+    }
+
+    async function loadRemote() {
+      if (!REMOTE.configured) return { ok: false, code: "NOT_CONFIGURED" };
+      const client = REMOTE.getClient();
+      if (!client) return { ok: false, code: "NOT_CONFIGURED" };
+      setSyncStatus("Syncing with Supabase...", "syncing");
+      try {
+        const response = await withTimeout(
+          client.from(REMOTE.table).select("data").eq("id", REMOTE.rowId).maybeSingle(),
+          4000
+        );
+        if (!response || response.error) throw (response && response.error) || new Error("REMOTE_READ");
+        const data = response.data && response.data.data;
+        if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("EMPTY_REMOTE");
+        const merged = deepMerge(clone(DEFAULT_CONFIG), data);
+        state.config = merged;
+        migrateSocial(state.config);
+        applyAll();
+        setupLenis();
+        renderAdminSections();
+        renderAdminContent();
+        renderAdminFooter();
+        refreshJson();
+        writeRemoteCache(merged);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(merged)); } catch (error) {}
+        state.remote.loaded = true;
+        setSyncStatus("Saved successfully!", "success");
+        return { ok: true, config: merged };
+      } catch (error) {
+        setSyncStatus("Offline - saved locally", "offline");
+        return { ok: false, code: error && error.message === "TIMEOUT" ? "TIMEOUT" : "REMOTE_ERROR" };
+      }
+    }
+
+    async function saveRemote(config) {
+      if (!REMOTE.configured) return { ok: false, code: "NOT_CONFIGURED" };
+      const client = REMOTE.getClient();
+      if (!client) return { ok: false, code: "NOT_CONFIGURED" };
+      let session = null;
+      try {
+        const result = await client.auth.getSession();
+        session = result && result.data ? result.data.session : null;
+      } catch (error) {}
+      if (!session) {
+        setSyncStatus("Offline - saved locally", "offline");
+        return { ok: false, code: "AUTH_REQUIRED" };
+      }
+      setSyncStatus("Syncing with Supabase...", "syncing");
+      try {
+        const { error } = await client.from(REMOTE.table).upsert({
+          id: REMOTE.rowId,
+          data: config,
+          updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+        writeRemoteCache(config);
+        setSyncStatus("Saved successfully!", "success");
+        return { ok: true };
+      } catch (error) {
+        setSyncStatus("Offline - saved locally", "offline");
+        return { ok: false, code: "REMOTE_ERROR" };
+      }
+    }
+
+    function scheduleRemoteSave() {
+      if (!REMOTE.configured) return;
+      if (!state.remote.session) {
+        setSyncStatus("Offline - saved locally", "offline");
+        return;
+      }
+      window.clearTimeout(state.remoteSaveTimer);
+      setSyncStatus("Syncing with Supabase...", "syncing");
+      state.remoteSaveTimer = window.setTimeout(() => { saveRemote(state.config); }, 800);
+    }
+
+    function waitForSupabaseSdk(timeout = 4500) {
+      if (window.supabase && typeof window.supabase.createClient === "function") return Promise.resolve(true);
+      if (state.remote.sdkPromise) return state.remote.sdkPromise;
+      state.remote.sdkPromise = new Promise((resolve) => {
+        const started = performance.now();
+        const timer = window.setInterval(() => {
+          if (window.supabase && typeof window.supabase.createClient === "function") {
+            window.clearInterval(timer);
+            resolve(true);
+          } else if (performance.now() - started > timeout) {
+            window.clearInterval(timer);
+            resolve(false);
+          }
+        }, 120);
+      });
+      return state.remote.sdkPromise;
+    }
+
+    function updateCloudControls() {
+      const configured = REMOTE.configured;
+      const signedIn = !!state.remote.session;
+      const push = $("#pushCloud");
+      const pull = $("#pullCloud");
+      if (push) push.disabled = !(configured && signedIn);
+      if (pull) pull.disabled = !configured;
+      const stateLabel = $("#cloudState");
+      if (stateLabel) stateLabel.textContent = configured ? (signedIn ? "Connected" : "Signed out") : "Not configured";
+      const signOut = $("#adminSignOut");
+      if (signOut) signOut.hidden = !(configured && signedIn);
+      const emailLabel = $("#adminEmailLabel");
+      const email = $("#adminEmail");
+      if (emailLabel) emailLabel.hidden = !configured;
+      if (email) email.hidden = !configured;
+      const intro = $("#gateIntro");
+      if (intro) intro.textContent = configured
+        ? "Sign in with your Supabase account to edit theme, copy and links. Your session stays on this device."
+        : "Enter the admin password to edit theme, copy and links. This gate is intentionally light — see the security note below.";
+      const security = $("#gateSecurityNote");
+      if (security) security.innerHTML = configured
+        ? "<strong>Security note:</strong> authentication is handled by Supabase Auth. Public reads and authenticated writes must be enforced with RLS. Never put a service_role key in this file."
+        : "<strong>Security note:</strong> a client-side password is not real security. Anyone with the file can inspect the code or localStorage. Use this as a convenience lock only, and move authentication to Supabase Auth for public administration.";
+      const localPassword = $("#localPasswordGroup");
+      if (localPassword) localPassword.hidden = configured;
+    }
+
+    function applyRemoteSession(session) {
+      const wasSignedIn = !!state.remote.session;
+      state.remote.session = !!session;
+      state.remote.user = session && session.user ? { id: session.user.id, email: session.user.email } : null;
+      updateCloudControls();
+      if (state.adminOpen && wasSignedIn !== state.remote.session) {
+        if (state.remote.session) showAdminWorkspace();
+        else showAdminGate();
+      }
+    }
+
+    async function bootstrapRemote() {
+      updateCloudControls();
+      if (!REMOTE.configured) {
+        setSyncStatus("Not configured", "idle");
+        return;
+      }
+      const ready = await waitForSupabaseSdk();
+      const client = REMOTE.getClient();
+      if (!ready || !client) {
+        setSyncStatus("Offline - saved locally", "offline");
+        updateCloudControls();
+        return;
+      }
+      try {
+        const result = await client.auth.getSession();
+        applyRemoteSession(result && result.data ? result.data.session : null);
+        client.auth.onAuthStateChange((event, session) => {
+          applyRemoteSession(session);
+        });
+      } catch (error) {
+        applyRemoteSession(null);
+      }
+      await loadRemote();
+    }
+
 
     function toast(message) {
       const el = $("#toast");
@@ -3705,6 +3951,7 @@
        ADMIN — theme, content, sections, SEO, data
        ========================================================================== */
     function isAdminAuthed() {
+      if (REMOTE.configured) return !!state.remote.session;
       try { return sessionStorage.getItem(AUTH_KEY) === "1"; }
       catch (error) { return false; }
     }
@@ -4108,6 +4355,7 @@
       renderAdminSections();
       syncAdminControls();
       refreshJson();
+      updateCloudControls();
       switchAdminTab(state.lastAdminTab || "theme");
     }
 
@@ -4141,8 +4389,11 @@
       else showAdminGate();
       if (overlay) {
         window.setTimeout(() => {
-          if (!isAdminAuthed()) { const input = $("#adminPassword"); if (input) input.focus(); }
-          else { const active = $(".admin-tab.active"); if (active) active.focus(); }
+          if (!isAdminAuthed()) {
+            const email = $("#adminEmail");
+            const input = REMOTE.configured && email && !email.hidden ? email : $("#adminPassword");
+            if (input) input.focus();
+          } else { const active = $(".admin-tab.active"); if (active) active.focus(); }
         }, 520);
       }
     }
@@ -4167,7 +4418,21 @@
       }
     }
 
+    async function signOutAdmin() {
+      if (REMOTE.configured) {
+        const client = REMOTE.getClient();
+        if (client) { try { await client.auth.signOut(); } catch (error) {} }
+      }
+      try { sessionStorage.removeItem(AUTH_KEY); } catch (error) {}
+      state.remote.session = false;
+      state.remote.user = null;
+      updateCloudControls();
+      showAdminGate();
+      toast("Signed out.");
+    }
+
     function lockAdmin() {
+      if (REMOTE.configured) { signOutAdmin(); return; }
       try { sessionStorage.removeItem(AUTH_KEY); } catch (error) {}
       showAdminGate();
       toast("Admin panel locked for this session.");
@@ -4540,6 +4805,29 @@
     }
 
     function bindAdminData() {
+      const pushCloud = $("#pushCloud");
+      if (pushCloud) pushCloud.addEventListener("click", async () => {
+        if (!REMOTE.configured) { toast("Supabase is not configured."); return; }
+        if (!state.remote.session) { toast("Sign in to push to the cloud."); return; }
+        pushCloud.disabled = true;
+        const result = await saveRemote(state.config);
+        if (result.ok) toast("Pushed to Supabase.");
+        else if (result.code === "AUTH_REQUIRED") toast("Session expired. Sign in again.");
+        else toast("Push failed. Local copy is safe.");
+        pushCloud.disabled = !state.remote.session;
+      });
+
+      const pullCloud = $("#pullCloud");
+      if (pullCloud) pullCloud.addEventListener("click", async () => {
+        if (!REMOTE.configured) { toast("Supabase is not configured."); return; }
+        pullCloud.disabled = true;
+        const result = await loadRemote();
+        if (result.ok) toast("Pulled the latest config from Supabase.");
+        else if (result.code === "TIMEOUT") toast("Cloud request timed out. Keeping the current config.");
+        else toast("Pull failed. Keeping the current config.");
+        pullCloud.disabled = !REMOTE.configured;
+      });
+
       const exportButton = $("#exportConfig");
       if (exportButton) exportButton.addEventListener("click", () => {
         refreshJson();
@@ -4672,6 +4960,8 @@
       }
       const lock = $("#adminLock");
       if (lock) lock.addEventListener("click", lockAdmin);
+      const signOut = $("#adminSignOut");
+      if (signOut) signOut.addEventListener("click", signOutAdmin);
       const close = $("#adminClose");
       if (close) close.addEventListener("click", () => closeAdmin());
       $$(".admin-tab").forEach((button) => button.addEventListener("click", () => switchAdminTab(button.dataset.adminTab)));
@@ -4681,6 +4971,7 @@
         event.preventDefault();
         if (login.dataset.busy === "1") return;
         const input = $("#adminPassword");
+        const emailInput = $("#adminEmail");
         const error = $("#gateError");
         const gateInner = $("#gateInner");
         const submit = login.querySelector('button[type="submit"]');
@@ -4700,17 +4991,52 @@
         login.dataset.busy = "1";
         if (submit) submit.disabled = true;
         try {
-          const valid = await verifyAdminPassword(input.value);
-          if (valid) {
-            try { sessionStorage.setItem(AUTH_KEY, "1"); } catch (storageError) {}
+          if (REMOTE.configured) {
+            const email = String(emailInput && emailInput.value || "").trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+              fail("Enter your admin email.");
+              if (emailInput) emailInput.focus();
+              return;
+            }
+            const client = REMOTE.getClient();
+            if (!client) {
+              // The deferred CDN bundle may not have executed yet.
+              await waitForSupabaseSdk();
+            }
+            const readyClient = REMOTE.getClient();
+            if (!readyClient) {
+              setSyncStatus("Offline - saved locally", "offline");
+              fail("Supabase is unavailable right now. Try again.");
+              return;
+            }
+            const result = await readyClient.auth.signInWithPassword({ email, password: input.value });
+            if (result && result.error) {
+              setSyncStatus("Authentication Failed", "error");
+              fail("Authentication Failed");
+              return;
+            }
+            const sessionResult = await readyClient.auth.getSession();
+            applyRemoteSession(sessionResult && sessionResult.data ? sessionResult.data.session : null);
             if (error) error.textContent = "";
+            if (input) input.value = "";
             showAdminWorkspace();
-            toast("Control room unlocked for this session.");
+            setSyncStatus("Syncing with Supabase...", "syncing");
+            toast("Signed in to Supabase.");
           } else {
-            fail("Incorrect password. Try again.");
+            const valid = await verifyAdminPassword(input.value);
+            if (valid) {
+              try { sessionStorage.setItem(AUTH_KEY, "1"); } catch (storageError) {}
+              if (error) error.textContent = "";
+              showAdminWorkspace();
+              toast("Control room unlocked for this session.");
+            } else {
+              fail("Incorrect password. Try again.");
+            }
           }
         } catch (cryptoError) {
-          fail("Password check needs HTTPS or http://localhost (Web Crypto).");
+          fail(REMOTE.configured
+            ? "Authentication Failed"
+            : "Password check needs HTTPS or http://localhost (Web Crypto).");
         } finally {
           login.dataset.busy = "";
           if (submit) submit.disabled = false;
@@ -4761,15 +5087,19 @@
       bindInteractions();
       bindAdmin();
       startFooterClock();
-      if (readSavedConfig() && Object.prototype.hasOwnProperty.call(readSavedConfig(), "adminPassword")) persist(true);
+      if (readSavedConfig() && Object.prototype.hasOwnProperty.call(readSavedConfig(), "adminPassword") && !REMOTE.configured) persist(true);
       initLoader();
       updateScrollUI();
+      updateCloudControls();
       window.setTimeout(() => {
         if (!document.body.classList.contains("webgl-ready")) document.body.classList.add("no-webgl");
       }, 6000);
       if (location.hash === "#admin") {
         window.setTimeout(() => openAdmin(true), 320);
       }
+      const startRemote = () => { bootstrapRemote(); };
+      if ("requestIdleCallback" in window) window.requestIdleCallback(startRemote, { timeout: 1200 });
+      else window.setTimeout(startRemote, 250);
     }
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
